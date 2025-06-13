@@ -67,13 +67,13 @@ def run_simulation(problem_data: Dict):
     # 2. SimPy 환경 및 핵심 컴포넌트를 생성
     env = simpy.Environment()
     model['Source'] = Source.Source(model,'Source', problem_data, env)
-    sink = Sink.Sink(env)
+    '''수정필요'''
+    # model['p1'] = Process.Process(model['Source'],'p1','p1')
+    # model['p2'] = Process.Process(model['Source'],'p2','p2')
+    model['sink'] = Sink.Sink(env)
 
     # 4. SimPy 환경을 실행
     env.run()
-
-    # 5. 시뮬레이션 결과를 출력합
-    sink.print_summary()
 
 
 if __name__ == "__main__":
@@ -87,6 +87,4 @@ if __name__ == "__main__":
     data_dict = load_data_from_csv(job_csv, operation_csv, process_csv)
 
     # 2. 로드한 데이터를 통해 시뮬레이션 모델링
-
-
     run_simulation(data_dict)

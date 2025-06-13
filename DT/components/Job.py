@@ -22,21 +22,6 @@ class Job:
         # Job의 진행 상태를 추적하는 인덱스. 0에서 시작합니다.
         self.step = 0
 
-    def get_current_operation(self) -> Optional[Operation]:
-        """현재 수행해야 할 공정 객체를 반환합니다."""
-        if not self.is_finished():
-            return self.operation_list[self.step]
-        return None
-
-    def advance_to_next_operation(self):
-        """하나의 공정을 마친 후, 다음 공정으로 상태를 업데이트합니다."""
-        if not self.is_finished():
-            self.step += 1
-
-    def is_finished(self) -> bool:
-        """이 Job의 모든 공정이 완료되었는지 여부를 반환합니다."""
-        return self.step >= len(self.operation_list)
-
     def __repr__(self):
         """Job 객체 출력 형식 정의"""
         return f"Job(id={self.id})"
