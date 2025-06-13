@@ -1,4 +1,4 @@
-id,arrival_time,Op1_Machine,Op1_Time,Op2_Machine,Op2_Time,Op3_Machine,Op3_Time,Op4_Machine,Op4_Time,Op5_Machine,Op5_Time
+id,arrival_time,op1_id,op1_time,op2_id,op2_time,op3_id,op3_time,op4_id,op4_time,op5_id,op5_time
 1,0,2,58,3,44,4,5,1,9,5,58
 2,0,2,89,1,97,5,96,4,77,3,84
 3,0,1,77,2,87,3,81,5,39,4,85

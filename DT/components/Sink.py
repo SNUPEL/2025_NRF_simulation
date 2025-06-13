@@ -1,6 +1,6 @@
 import simpy
 from typing import List
-from components.job import Job
+from DT.components.Job import Job
 
 
 class Sink:

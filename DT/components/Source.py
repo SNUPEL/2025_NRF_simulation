@@ -1,32 +1,40 @@
+from io import StringIO
+
+import pandas as pd
 import simpy
+import random
 from typing import List, Dict
-from components.job import Job
-from components.Process import job_lifecycle
-from components.Sink import Sink
+from DT.components import Job
+
+class Source:
+    def __init__(self, model, name, problem_data: dict, env: simpy.Environment):
+        self.model = model
+        self.name = name
+        self.job_data = problem_data['job_info']
+        self.operation_data = problem_data['operation_info']
+        self.env = env
+
+        self.process_routing = 'Random'
+
+        self.env.process(self.job_generator())
+
+    def job_generator(self):
+        for job_info in self.job_data:
+            IAT = job_info['arrival_time'] - self.env.now
+            yield self.env.timeout(IAT)
+
+            job = Job.Job(job_info['id'], job_info['operations'], self.operation_data)
+            print(job.id, '생성:', self.env.now)
+
+            self.env.process(self.to_next_process(job))
+
+    def to_next_process(self,job):
+        if self.process_routing == 'Random':
+            next_process= self.random(job.operation_list[job.step])
+        print('다음 프로세스:', next_process)
+        yield self.model[next_process].store.put(job)
 
 
-def job_generator(env: simpy.Environment, jobs_data: List[Dict], machine_store: simpy.FilterStore, sink: Sink):
-    """
-    시뮬레이션 시작 시, 주어진 데이터로부터 Job들을 생성하고,
-    각 Job을 처리할 Process(작업자)를 생성하여 실행시키는 '기동 장치' 역할을
-    이 함수 자체가 하나의 SimPy 프로세스
+    def random(self, operation):
+        return random.choice(operation.process_list)
 
-    Args:
-        env (simpy.Environment): SimPy 시뮬레이션 환경
-        jobs_data (List[Dict]): 모든 Job의 정보가 담긴 리스트
-        machine_store (simpy.FilterStore): 중앙 기계 관리소
-        sink (Sink): 결과 기록용 싱크 객체
-    """
-    print(f"[Time {env.now:5.2f}] Source: Job 생성을 시작합니다.")
-
-    # 모든 Job을 시뮬레이션 시작과 동시에(Time=0) 투입
-    for job_info in jobs_data:
-        # 1. Job 데이터로부터 Job 객체를 생성
-        new_job = Job(job_info['id'], job_info['operations'])
-
-        # 2. 생성된 Job을 처리할 'job_lifecycle' 프로세스를 SimPy 환경에 등록하고 시작
-        env.process(job_lifecycle(env, new_job, machine_store, sink))
-
-    # 모든 Job 생성이 완료되었음을 알림
-    yield env.timeout(0)
-    print(f"[Time {env.now:5.2f}] Source: 모든 Job 생성 및 프로세스 할당 완료.")

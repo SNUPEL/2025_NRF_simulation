@@ -1,6 +1,6 @@
 import simpy
-from components.job import Job
-from components.Sink import Sink
+from DT.components.Job import Job
+from DT.components.Sink import Sink
 
 
 def job_lifecycle(env: simpy.Environment, job: Job, machine_store: simpy.FilterStore, sink: Sink):

@@ -4,15 +4,15 @@ class Operation:
     Job의 일부로서 정보를 제공하는 역할
     """
 
-    def __init__(self, name: str, machine_type: str, processing_time: float):
+    def __init__(self, operation_data: dict):
         # 공정의 이름 (예: "J1_Op1")
-        self.name = name
+        self.id = operation_data['id']
 
         # 이 공정을 수행하는 데 필요한 기계의 종류 (예: "M1")
-        self.machine_type = machine_type
+        self.process_list = operation_data['process']
 
         # 해당 기계에서 이 공정을 수행하는 데 걸리는 시간
-        self.processing_time = processing_time
+        self.processing_time = operation_data['processing_time']
 
     def __repr__(self):
-        return f"Operation(name={self.name}, machine={self.machine_type}, time={self.processing_time})"
+        return f"Operation(name={self.name}, machine={self.process_list}, time={self.processing_time})"
