@@ -15,4 +15,4 @@ class Operation:
         self.processing_time = operation_data['processing_time']
 
     def __repr__(self):
-        return f"Operation(name={self.name}, machine={self.process_list}, time={self.processing_time})"
+        return f"Operation(name={self.id}, machine={self.process_list}, time={self.processing_time})"

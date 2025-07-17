@@ -1,3 +1,5 @@
+import pandas as pd
+
 class Monitor(object):
     def __init__(self, filepath):
         self.filepath = filepath  ## Event tracer 저장 경로
@@ -9,7 +11,7 @@ class Monitor(object):
         self.process_name = list()
         self.machine_name = list()
 
-        self.event_tracer = event_tracer = pd.DataFrame(columns=['Time', 'Part', 'Operation', 'Process', 'Machine', 'Event'])
+        self.event_tracer = pd.DataFrame(columns=['Time', 'Part', 'Operation', 'Process', 'Machine', 'Event'])
 
     def record(self, time, part_id=None, operation=None, process=None, machine=None, event=None):
         self.time.append(time)
@@ -19,7 +21,7 @@ class Monitor(object):
         self.process_name.append(process)
         self.machine_name.append(machine)
 
-    def get_event_tracer(self):
+    def make_event_tracer(self):
         self.event_tracer['Time'] = self.time
         self.event_tracer['Part'] = self.part
         self.event_tracer['Operation'] = self.operation
