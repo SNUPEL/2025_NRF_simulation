@@ -10,7 +10,8 @@ class Process:
         self.id = id
         self.proc_data = problem_data['process_info']
         self.env = env
-        self.process_routing = 'Random'
+        # --- 라우팅 규칙 설정: 'Random', 'SPT', 'LPT', 'MWKR', 'LWKR' 중 선택 ---
+        self.process_routing = 'SPT'  # 예시로 SPT로 설정
 
         self.store = simpy.FilterStore(env)
         self.machines = simpy.FilterStore(self.env, capacity=self.proc_data[self.id]['capacity'])
@@ -23,37 +24,85 @@ class Process:
         self.env.process(self.run())
 
     def run(self):
+        """
+        설비의 메인 실행 로직.
+        대기 중인 작업(Job)들 중에서 설정된 휴리스틱 규칙에 따라 다음 작업을 선택하여 처리합니다.
+        """
         while True:
             machine = yield self.machines.get()
-            job = yield self.store.get()
-            self.monitor.record(time=self.env.now, part_id=job.id, operation=job.operation_list[job.step].id, process=self.id,machine=machine, event='job assigned')
+
+            # 대기열(store)에 작업이 있을 때만 휴리스틱 규칙 적용
+            if len(self.store.items) > 0:
+                # 설정된 라우팅(디스패칭) 규칙에 따라 다음 작업 선택
+                if self.process_routing == 'SPT':
+                    job_to_process = self.spt()
+                elif self.process_routing == 'LPT':
+                    job_to_process = self.lpt()
+                elif self.process_routing == 'MWKR':
+                    job_to_process = self.mwkr()
+                elif self.process_routing == 'LWKR':
+                    job_to_process = self.lwkr()
+                else:  # 'Random' 또는 기본값은 FIFO
+                    job_to_process = self.store.items[0]
+
+                # 선택된 작업을 store에서 꺼냄
+                job = yield self.store.get(lambda item: item.id == job_to_process.id)
+            else:
+                # 대기열이 비어있으면 가장 먼저 들어오는 작업을 처리 (기존 FIFO 방식)
+                job = yield self.store.get()
+
+            self.monitor.record(time=self.env.now, part_id=job.id, operation=job.operation_list[job.step].id,
+                                process=self.id, machine=machine, event='job assigned')
             yield self.env.process(self.processing(job, machine))
 
     def processing(self, job, machine):
         operation = job.operation_list[job.step]
-        if not operation.processing_time:
-            operation_time = operation.processing_time
-        else:
-            operation_time = job.operation_times[job.step]
+        operation_time = job.operation_times[job.step]
+
         yield self.env.timeout(operation_time)
-        self.monitor.record(time=self.env.now, part_id=job.id, operation=operation.id, process=self.id,machine=machine, event='operation complete')
+        self.monitor.record(time=self.env.now, part_id=job.id, operation=operation.id, process=self.id, machine=machine,
+                            event='operation complete')
         yield self.env.process(self.to_next_process(job, machine))
 
     def to_next_process(self, job, machine):
         job.step += 1
         if job.step != len(job.operation_list):
             next_operation = job.operation_list[job.step]
-            if self.process_routing == 'Random':
-                next_process= self.random(next_operation)
-            print('다음 프로세스:', next_process)
+            # 다음 공정을 처리할 수 있는 설비가 여러 개일 경우 랜덤으로 선택
+            next_process = random.choice(next_operation.process_list)
+
+            print(f'{self.env.now:.2f}: {job.id} (Op: {next_operation.id}) -> {next_process}')
             yield self.model[next_process].store.put(job)
             yield self.machines.put(machine)
-            self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id, process=next_process,machine=None, event='Job transferred')
+            self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id, process=next_process,
+                                machine=None, event='Job transferred')
         else:
             next_process = 'Sink'
             yield self.model[next_process].store.put(job)
             yield self.machines.put(machine)
-            self.monitor.record(time=self.env.now, part_id=job.id, operation=None, process=next_process, machine=None, event='Job transferred')
+            self.monitor.record(time=self.env.now, part_id=job.id, operation=None, process=next_process, machine=None,
+                                event='Job transferred')
 
-    def random(self, operation):
-        return random.choice(operation.process_list)
+    def spt(self) -> Job:
+        """Shortest Processing Time: 가장 짧은 공정 시간을 가진 작업을 선택"""
+        return min(self.store.items, key=lambda job: job.operation_times[job.step])
+
+    def lpt(self) -> Job:
+        """Longest Processing Time: 가장 긴 공정 시간을 가진 작업을 선택"""
+        return max(self.store.items, key=lambda job: job.operation_times[job.step])
+
+    def mwkr(self) -> Job:
+        """Most Work Remaining: 남은 공정 시간의 총합이 가장 긴 작업을 선택"""
+
+        def get_remaining_work(job: Job):
+            return sum(job.operation_times[job.step:])
+
+        return max(self.store.items, key=get_remaining_work)
+
+    def lwkr(self) -> Job:
+        """Least Work Remaining: 남은 공정 시간의 총합이 가장 짧은 작업을 선택"""
+
+        def get_remaining_work(job: Job):
+            return sum(job.operation_times[job.step:])
+
+        return min(self.store.items, key=get_remaining_work)
