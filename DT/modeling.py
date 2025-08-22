@@ -3,8 +3,9 @@ import pandas as pd
 import sys
 import os
 from typing import List, Dict, Optional
-import matplotlib.pyplot as plt
-from utils.Jobshop_converter import *
+
+from utils.benchmarking_converter import *
+from utils.postprocessing import *
 
 # 시뮬레이션 컴포넌트 임포트
 try:
@@ -18,56 +19,6 @@ try:
 except ImportError:
     print("오류: DT.components 모듈을 찾을 수 없습니다.")
     sys.exit(1)
-
-def plot_gantt_chart(gantt_df: pd.DataFrame):
-    """
-    Pandas DataFrame을 직접 받아 안정적으로 간트 차트를 생성합니다.
-    """
-    if gantt_df.empty:
-        print("오류: 간트 차트를 그릴 데이터가 없습니다.")
-        return
-
-    makespan = gantt_df['Finish'].max()
-
-    unique_jobs = sorted(gantt_df['Job'].unique())
-    colors = plt.cm.get_cmap('tab20', len(unique_jobs))
-    job_color_map = {job: colors(i) for i, job in enumerate(unique_jobs)}
-
-    fig, ax = plt.subplots(figsize=(25, 12))
-
-    # Y축을 기계 이름으로 설정 (M1, M2, ... 순으로 정렬)
-    machine_names = sorted(gantt_df['Machine_y'].unique(), key=lambda m: int(m[1:]))
-
-    for machine in machine_names:
-        machine_tasks = gantt_df[gantt_df['Machine_y'] == machine]
-        for _, task in machine_tasks.iterrows():
-            start_time = task['Start']
-            duration = task['Finish'] - start_time
-            job_name = task['Job']
-
-            ax.barh(machine, duration, left=start_time, color=job_color_map[job_name], edgecolor='black', height=0.7)
-
-            op_num = task['Operation'].split('_S')[-1]
-            ax.text(start_time + duration / 2, machine, f"{job_name}(S{op_num})",
-                    ha='center', va='center', color='white', fontweight='bold', fontsize=9)
-
-    ax.set_xlabel('Time', fontsize=14)
-    ax.set_ylabel('Machine', fontsize=14)
-    ax.set_title('Gantt Chart for Job Shop Scheduling', fontsize=18)
-    ax.grid(axis='x', linestyle='--')
-
-    legend_elements = [plt.Rectangle((0, 0), 1, 1, color=job_color_map[job]) for job in unique_jobs]
-    ax.legend(legend_elements, unique_jobs, title="Jobs", bbox_to_anchor=(1.01, 1), loc='upper left')
-
-    ax.text(1.0, 1.05, f"Makespan: {makespan:.2f}", transform=ax.transAxes, fontsize=14, ha='right', va='top',
-            bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.5))
-
-    plt.tight_layout(rect=[0, 0, 0.9, 1])
-
-    chart_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results', 'gantt_chart.png')
-    plt.savefig(chart_path)
-    print(f"간트 차트가 이미지 파일로 '{chart_path}'에 저장되었습니다.")
-    # plt.show() # 로컬에서 직접 실행할 때 주석 해제하여 바로 확인
 
 def load_data_from_csv(data_dir: str, problem_name: str) -> Optional[Dict]:
     print("\n--- STEP 2: CSV 데이터 로딩 시작 ---")
@@ -98,10 +49,10 @@ def load_data_from_csv(data_dir: str, problem_name: str) -> Optional[Dict]:
         print(f"CSV 데이터 로딩 실패: {e}")
         return None
 
-def run_simulation(problem_data: Dict, event_log_path: str, routing_rule: str) -> Monitor:
+def run_simulation(problem_data: Dict, event_log_path: str, routing_rule: str, significant_digits: int) -> Monitor:
     print(f"\n--- STEP 3: 시뮬레이션 시작 (규칙: {routing_rule}) ---")
     env = simpy.Environment()
-    model, monitor = {}, Monitor(event_log_path)
+    model, monitor = {}, Monitor(event_log_path, significant_digits)
     model['Source'] = Source(model, monitor, 'Source', problem_data, env)
     model['Sink'] = Sink(model, monitor, 'Sink', env)
     for proc_id in problem_data.get('process_info', {}).keys():
@@ -114,63 +65,43 @@ def run_simulation(problem_data: Dict, event_log_path: str, routing_rule: str) -
 
 # 메인 실행 함수
 def main():
-    TXT_FILENAME = "la01.txt"
-    ROUTING_RULE = 'Random'        # --- 라우팅 규칙 설정: 'Random', 'SPT', 'LPT', 'MWKR', 'LWKR' 중 선택 ---
-    PROBLEM_FOLDER, DATA_FOLDER, RESULTS_FOLDER = "problem", "data", "results"
-
-    print("=" * 50, f"JSSP 데이터 변환 및 시뮬레이션 (규칙: {ROUTING_RULE})", "=" * 50, sep="\n")
-
     dt_folder_path = os.path.dirname(os.path.abspath(__file__))
-    txt_file_path = os.path.join(dt_folder_path, PROBLEM_FOLDER, TXT_FILENAME)
+
+    is_bench_marking = True
+    significant_digits = 10
+
+    problem_name = "la01"
+    DATA_FOLDER = "data"
     data_dir = os.path.join(dt_folder_path, DATA_FOLDER)
+
+    RESULTS_FOLDER = "results"
     results_dir = os.path.join(dt_folder_path, RESULTS_FOLDER)
 
     os.makedirs(data_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)
 
-    if not convert_jssp_to_csvs(txt_file_path, data_dir): return
+    if is_bench_marking:
+        PROBLEM_TYPE = "JSSP"             # --- 문제 종류 선택: "JSSP", "PFSP", "PMSP" ---
+        TXT_FILENAME = problem_name + ".txt"
+        PROBLEM_FOLDER = "problem"
+        txt_file_path = os.path.join(dt_folder_path, PROBLEM_FOLDER, TXT_FILENAME)
 
-    problem_name = os.path.basename(txt_file_path).split('.')[0]
+        convert_banchmarking_data(txt_file_path, data_dir, PROBLEM_TYPE)
+
     data_dict = load_data_from_csv(data_dir, problem_name)
     if not data_dict: return
 
     log_output_path = os.path.join(results_dir, "event_log.csv")
-    monitor = run_simulation(data_dict, log_output_path, ROUTING_RULE)
+
+    ROUTING_RULE = "FIFO"  # --- 라우팅 규칙 설정: 'SPT', 'LPT', 'MWKR', 'LWKR', 'Random', FIFO 중 선택 ---
+    monitor = run_simulation(data_dict, log_output_path, ROUTING_RULE, significant_digits)
 
     print("\n--- STEP 4: 결과 저장 시작 ---")
     monitor.make_event_tracer()
     monitor.save_event_tracer()
     print(f"최종 이벤트 로그가 '{log_output_path}'에 저장되었습니다.")
 
-    print("\n--- STEP 5: Matplotlib 간트 차트 생성 시작 ---")
-    try:
-        df = pd.read_csv(log_output_path)
-
-        pivot_df = df.pivot_table(
-            index=['Part', 'Operation', 'Process'],
-            columns='Event',
-            values='Time'
-        ).reset_index()
-
-        pivot_df.rename(columns={
-            'job assigned': 'Start',
-            'operation complete': 'Finish',
-            'Part': 'Job',
-            'Process': 'Machine_y'
-        }, inplace=True)
-
-        gantt_df = pivot_df.dropna(subset=['Start', 'Finish'])
-
-        if not gantt_df.empty:
-            plot_gantt_chart(gantt_df)
-        else:
-            print("오류: 간트 차트를 그릴 데이터를 생성하지 못했습니다.")
-
-    except Exception as e:
-        print(f"간트 차트 생성 실패: {e}")
-
-    print("\n" + "=" * 50, "모든 작업이 성공적으로 완료되었습니다.", "=" * 50, sep="\n")
-
+    plot_gantt_chart(log_output_path)
 
 if __name__ == "__main__":
     main()

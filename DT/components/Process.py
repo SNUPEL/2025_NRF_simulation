@@ -11,7 +11,7 @@ class Process:
         self.proc_data = problem_data['process_info']
         self.env = env
         # --- 라우팅 규칙 설정: 'Random', 'SPT', 'LPT', 'MWKR', 'LWKR' 중 선택 ---
-        self.process_routing = 'SPT'  # 예시로 SPT로 설정
+        self.process_routing = None
 
         self.store = simpy.FilterStore(env)
         self.machines = simpy.FilterStore(self.env, capacity=self.proc_data[self.id]['capacity'])
@@ -29,6 +29,7 @@ class Process:
         대기 중인 작업(Job)들 중에서 설정된 휴리스틱 규칙에 따라 다음 작업을 선택하여 처리합니다.
         """
         while True:
+            yield self.env.timeout(1e-13)
             machine = yield self.machines.get()
 
             # 대기열(store)에 작업이 있을 때만 휴리스틱 규칙 적용
@@ -42,7 +43,9 @@ class Process:
                     job_to_process = self.mwkr()
                 elif self.process_routing == 'LWKR':
                     job_to_process = self.lwkr()
-                else:  # 'Random' 또는 기본값은 FIFO
+                elif self.process_routing == 'RANDOM':
+                    job_to_process = self.random()
+                else:  # 기본값은 FIFO
                     job_to_process = self.store.items[0]
 
                 # 선택된 작업을 store에서 꺼냄
@@ -106,3 +109,7 @@ class Process:
             return sum(job.operation_times[job.step:])
 
         return min(self.store.items, key=get_remaining_work)
+
+    def random(self) -> Job:
+        """Random Selection: 대기 중인 작업 중에서 무작위로 하나를 선택"""
+        return random.choice(self.store.items)

@@ -1,8 +1,9 @@
 import pandas as pd
 
 class Monitor(object):
-    def __init__(self, filepath):
+    def __init__(self, filepath, significant_digits):
         self.filepath = filepath  ## Event tracer 저장 경로
+        self.significant_digits = significant_digits  ## 시간의 유효숫자
 
         self.time = list()
         self.event = list()
@@ -14,7 +15,7 @@ class Monitor(object):
         self.event_tracer = pd.DataFrame(columns=['Time', 'Part', 'Operation', 'Process', 'Machine', 'Event'])
 
     def record(self, time, part_id=None, operation=None, process=None, machine=None, event=None):
-        self.time.append(time)
+        self.time.append(round(time, self.significant_digits))
         self.event.append(event)
         self.part.append(part_id)
         self.operation.append(operation)
