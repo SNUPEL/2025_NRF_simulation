@@ -49,15 +49,15 @@ def load_data_from_csv(data_dir: str, problem_name: str) -> Optional[Dict]:
         print(f"CSV 데이터 로딩 실패: {e}")
         return None
 
-def run_simulation(problem_data: Dict, event_log_path: str, routing_rule: str, significant_digits: int) -> Monitor:
-    print(f"\n--- STEP 3: 시뮬레이션 시작 (규칙: {routing_rule}) ---")
+def run_simulation(problem_data: Dict, event_log_path: str, dispatching_rule: str, significant_digits: int) -> Monitor:
+    print(f"\n--- STEP 3: 시뮬레이션 시작 (규칙: {dispatching_rule}) ---")
     env = simpy.Environment()
     model, monitor = {}, Monitor(event_log_path, significant_digits)
     model['Source'] = Source(model, monitor, 'Source', problem_data, env)
     model['Sink'] = Sink(model, monitor, 'Sink', env)
     for proc_id in problem_data.get('process_info', {}).keys():
         process_instance = Process(model, monitor, proc_id, problem_data, env)
-        process_instance.process_routing = routing_rule
+        process_instance.process_dispatching = dispatching_rule
         model[proc_id] = process_instance
     env.run()
     print("시뮬레이션 종료.")
@@ -70,7 +70,7 @@ def main():
     is_bench_marking = True
     significant_digits = 10
 
-    problem_name = "la01"
+    problem_name = "ta001"
     DATA_FOLDER = "data"
     data_dir = os.path.join(dt_folder_path, DATA_FOLDER)
 
@@ -81,9 +81,9 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
 
     if is_bench_marking:
-        PROBLEM_TYPE = "JSSP"             # --- 문제 종류 선택: "JSSP", "PFSP", "PMSP" ---
+        PROBLEM_TYPE = "PFSP"             # --- 문제 종류 선택: "JSSP", "PFSP", "PMSP" ---
         TXT_FILENAME = problem_name + ".txt"
-        PROBLEM_FOLDER = "problem"
+        PROBLEM_FOLDER = "problem/" + PROBLEM_TYPE
         txt_file_path = os.path.join(dt_folder_path, PROBLEM_FOLDER, TXT_FILENAME)
 
         convert_banchmarking_data(txt_file_path, data_dir, PROBLEM_TYPE)
@@ -93,8 +93,17 @@ def main():
 
     log_output_path = os.path.join(results_dir, "event_log.csv")
 
-    ROUTING_RULE = "FIFO"  # --- 라우팅 규칙 설정: 'SPT', 'LPT', 'MWKR', 'LWKR', 'Random', FIFO 중 선택 ---
-    monitor = run_simulation(data_dict, log_output_path, ROUTING_RULE, significant_digits)
+    if PROBLEM_TYPE == "JSSP":
+        SEQUENCING_RULE = "FIFO"  # JSSP는 시퀀싱 규칙 FIFO로 고정
+        DISPATCHING_RULE = "SPT"  # --- 디스패칭 규칙 설정: 'SPT', 'LPT', 'MWKR', 'LWKR', 'Random', FIFO 중 선택 ---
+    elif PROBLEM_TYPE == "PFSP":
+        SEQUENCING_RULE = "RANDOM"  # --- 시퀀싱 규칙 설정: 'SPT', 'LPT', 'MWKR', 'LWKR', 'Random', FIFO 중 선택 ---
+        DISPATCHING_RULE = "FIFO"  # --- PFSP는 디스패칭 규칙 FIFO로 고정
+    else:
+        SEQUENCING_RULE = "FIFO"  # 일반적으로 시퀀싱 규칙 FIFO로 고정
+        DISPATCHING_RULE = "Random"  # --- 디스패칭 규칙 설정: 'SPT', 'LPT', 'MWKR', 'LWKR', 'Random', FIFO 중 선택 ---
+
+    monitor = run_simulation(data_dict, log_output_path, DISPATCHING_RULE, significant_digits)
 
     print("\n--- STEP 4: 결과 저장 시작 ---")
     monitor.make_event_tracer()

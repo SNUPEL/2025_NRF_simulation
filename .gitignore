@@ -1,6 +1,6 @@
+DT/results/
 *.png
 event_log.csv
-
 *.xml
 
 .idea/
