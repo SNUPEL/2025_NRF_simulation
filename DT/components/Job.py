@@ -14,11 +14,20 @@ class Job:
         # 이 Job을 구성하는 Operation 객체들의 '순서가 있는' 리스트
         # JSSP의 핵심인 고유한 공정 경로(Routing)를 이 리스트가 표현합니다.
         self.operation_list: List[Operation] = [Operation(operations_data[op]) for op in job_info['operations']]
-        self.operation_times = job_info['operation_times']
+        #
+        # self.operation_times = job_info['operation_times']
 
         # 시뮬레이션 기록을 위한 변수들
         self.arrival_time = job_info['arrival_time']  # 시스템 도착 시간
         self.completion_time = -1.0  # 시스템 완료 시간. -1은 아직 미완료 상태임을 의미.
+
+        # 이미 처리한 키 집합
+        assigned_keys = {'id', 'operations', 'arrival_time'}
+
+        # 나머지 job_info 키들을 자동으로 속성으로 추가
+        for key, value in job_info.items():
+            if key not in assigned_keys:
+                setattr(self, key, value)
 
         # Job의 진행 상태를 추적하는 인덱스. 0에서 시작
         self.step = 0

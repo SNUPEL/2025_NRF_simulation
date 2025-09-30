@@ -12,7 +12,7 @@ class Operation:
         self.process_list = operation_data['process']
 
         # 해당 기계에서 이 공정을 수행하는 데 걸리는 시간
-        self.processing_time = operation_data['processing_time']
+        self.processing_time = {operation_data['process'][i]:operation_data['processing_time'][i] for i in range(len(operation_data['process']))}
 
     def __repr__(self):
         return f"Operation(name={self.id}, machine={self.process_list}, time={self.processing_time})"

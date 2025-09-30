@@ -16,7 +16,7 @@ class Source:
         self.operation_data = problem_data['operation_info']
         self.env = env
 
-        self.process_routing = None
+        self.routing_rule = 'WSPT'
         self.sequencing_rule = None
 
         self.env.process(self.job_generator())
@@ -53,8 +53,12 @@ class Source:
     def to_next_process(self,job):
         next_operation = job.operation_list[job.step]
         next_process = self.routing(next_operation)
-        print('다음 프로세스:', next_process)
-        yield self.model[next_process].store.put(job)
+        print('희망 다음 프로세스:', next_process)
+        if len(self.model[next_process].machines.items) - len(self.model[next_process].store.items) > 0:
+            yield self.model[next_process].store.put(job)
+        else:
+            for proc in job.operation_list[job.step].process_list:
+                yield self.model[proc].store.put(job)
         self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id, process=next_process, machine=None, event='Job transferred')
 
 
@@ -64,13 +68,13 @@ class Source:
 
         def spt(job_list):
             # 각 job의 총 처리시간 계산
-            total_times = {job: sum(job.operation_times) for job in job_list}
+            total_times = {job: sum([sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list]) for job in job_list}
             # 총 처리시간 오름차순으로 정렬
             return sorted(job_list, key=lambda j: total_times[j])
 
         def lpt(job_list):
             # 각 job의 총 처리시간 계산
-            total_times = {job: sum(job.operation_times) for job in job_list}
+            total_times = {job: sum([sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list]) for job in job_list}
             # 총 처리시간 오름차순으로 정렬
             return sorted(job_list, key=lambda j: total_times[j], reverse=True)
 
@@ -79,7 +83,7 @@ class Source:
             first_group = []  # 첫 기계가 더 짧은 job들
             second_group = []  # 마지막 기계가 더 짧은 job들
 
-            operation_times = {job: job.operation_times for job in job_list}
+            operation_times = {job:[sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list] for job in job_list}
             for j in job_list:
                 if operation_times[j][0] < operation_times[j][-1]:
                     first_group.append(j)
@@ -94,7 +98,7 @@ class Source:
             return first_group + second_group
 
         def palmer(job_list):
-            operation_times = {job: job.operation_times for job in job_list}
+            operation_times = {job:[sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list] for job in job_list}
             m = len(operation_times[job_list[0]])  # 기계 수
             # 각 job의 Palmer 지수 계산
             slope_index = {}
@@ -110,6 +114,12 @@ class Source:
             sorted_jobs = sorted(job_list, key=lambda j: slope_index[j], reverse=True)
             return sorted_jobs
 
+        def wspt(job_list):
+            # 각 job의 총 처리시간 계산
+            weighted_time = {job: min(job.operation_list[0].processing_time.values()) / job.weight for job in job_list}
+            # 총 처리시간 오름차순으로 정렬
+            return sorted(job_list, key=lambda j: weighted_time[j])
+
         if self.sequencing_rule == 'RANDOM':
             adjusted_batch_job_list = random(batch_job_list)
         elif self.sequencing_rule == 'SPT':
@@ -120,6 +130,8 @@ class Source:
             adjusted_batch_job_list = johnson(batch_job_list)
         elif self.sequencing_rule == 'PALMER':
             adjusted_batch_job_list = palmer(batch_job_list)
+        elif self.sequencing_rule == 'WSPT':
+            adjusted_batch_job_list = wspt(batch_job_list)
         else:
             adjusted_batch_job_list = batch_job_list
 
@@ -129,10 +141,26 @@ class Source:
         def random(operation):
             return rd.choice(operation.process_list)
 
-        if self.process_routing == 'RANDOM':
+        def spt(operation):
+            return min(operation.processing_time, key=operation.processing_time.get)
+
+        def lpt(operation):
+            return max(operation.processing_time, key=operation.processing_time.get)
+
+        def wspt(operation):
+            return min(operation.processing_time, key=operation.processing_time.get)
+
+        if self.routing_rule == 'RANDOM':
             next_process = random(next_operation)
+        elif self.routing_rule == 'SPT':
+            next_process = spt(next_operation)
+        elif self.routing_rule == 'LPT':
+            next_process = lpt(next_operation)
+        elif self.routing_rule == 'WSPT':
+            next_process = spt(next_operation)
         else:
             next_process = next_operation.process_list[0]
+
 
         return next_process
 

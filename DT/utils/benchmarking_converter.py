@@ -8,8 +8,8 @@ def convert_banchmarking_data(txt_file_path: str, output_dir: str, problem_type:
         convert_jssp_to_csvs(txt_file_path, output_dir)
     elif problem_type == "PFSP":
         convert_pfsp_to_csvs(txt_file_path, output_dir)
-    elif problem_type == "PFSP":
-        pass
+    elif problem_type == "PMSP":
+        convert_pmsp_to_csvs(txt_file_path, output_dir)
     else:
         raise Exception("올바르지 않은 문제 유형입니다.")
 
@@ -152,6 +152,123 @@ def convert_pfsp_to_csvs(txt_file_path: str, output_dir: str) -> bool:
     except Exception as e:
         print(f".txt 파일 변환 실패: {e}")
         return False
+
+def convert_pmsp_to_csvs(txt_file_path: str, output_dir: str) -> bool:
+    """PMSP 벤치마크 .txt 파일을 읽어 시뮬레이션용 CSV 파일 3종으로 변환합니다."""
+    def _parse_pmsp_data(machines_raw, weights_raw):
+        """PMSP 원본 데이터를 파싱하여 CSV 작성에 필요한 데이터 구조로 변환합니다."""
+        all_jobs, all_ops, proc_caps = [], {}, defaultdict(int)
+        m = len(machines_raw)       # 기계 수
+        n = len(machines_raw[0])    # 작업 수
+
+        # 기계 용량 설정
+        for i in range(m):
+            proc_caps[f"M{i+1}"] = 1
+
+        # 작업 및 연산 데이터 생성
+        for j in range(n):
+            job_id = f"J{j+1}"
+            op_id  = f"Op_{job_id}_S1"
+            w      = float(weights_raw[j]) if j < len(weights_raw) else 1.0
+
+            # operations_sequence 구조
+            all_jobs.append({
+                'id': job_id,
+                'arrival_time': 0.0,
+                'weight': w,
+                'operations_sequence': [op_id]
+            })
+
+            # Operation 리스트: 기계별 처리시간
+            all_ops[f"{op_id}"] = {
+                'id':       f"{op_id}",
+                'job_id':   job_id,
+                'process':  [f"M{i+1}" for i in range(m)],
+                'time':     [machines_raw[i][j] for i in range(m)],
+                'weight':   w
+            }
+
+        procs_data = [
+            {'id': k, 'capacity': v}
+            for k, v in sorted(proc_caps.items(), key=lambda x: int(x[0][1:]))
+        ]
+        return all_jobs, list(all_ops.values()), procs_data
+
+    def _format_jobs_for_csv(all_jobs, operation):
+        """파싱된 Job 데이터를 CSV에 쓰기 좋은 딕셔너리 리스트 형태로 변환합니다."""
+        formatted_jobs = []
+        for job in all_jobs:
+            row = {
+                'id': job['id'],
+                'arrival_time': job['arrival_time'],
+                'weight': job['weight']
+            }
+            for i, op in enumerate(job['operations_sequence']):
+                row[f'op{i+1}_id']   = op
+                row[f'op{i+1}_time'] = operation[i]['time']
+            formatted_jobs.append(row)
+        return formatted_jobs
+
+    print("\n--- STEP 1: PMSP .txt 파일 변환 시작 ---")
+    # try:
+    if not os.path.exists(txt_file_path):
+        raise FileNotFoundError(f"입력 파일을 찾을 수 없습니다: {txt_file_path}")
+
+    # 빈 줄/주석 제거
+    with open(txt_file_path, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+    if not lines:
+        raise ValueError("입력 파일이 비어있습니다.")
+
+    # 헤더 위치
+    header_pij = next(i for i, ln in enumerate(lines) if ln.lower().startswith('pij'))
+    header_wj  = next(i for i, ln in enumerate(lines) if ln.lower().startswith('wj'))
+
+    # 데이터 분리
+    machines_raw = [
+        list(map(int, lines[i].split()))
+        for i in range(header_pij+1, header_wj)
+    ]
+    weights_raw = list(map(int, lines[header_wj+1].split()))
+
+    # 파싱
+    all_jobs, ops_data, procs_data = _parse_pmsp_data(machines_raw, weights_raw)
+
+    # max_ops 계산
+    max_ops = max(len(job['operations_sequence']) for job in all_jobs)
+    jobs_data = _format_jobs_for_csv(all_jobs, ops_data)
+
+    # 리스트 값을 문자열로 변환
+    for op in ops_data:
+        # process 필드: ['M1','M2',...] → "M1,M2,..."
+        if isinstance(op.get('process'), list):
+            op['process'] = ','.join(op['process'])
+        # time 필드: [23,35,...] → "23,35,..."
+        if isinstance(op.get('time'), list):
+            op['time'] = ','.join(str(t) for t in op['time'])
+
+    # CSV 작성 헬퍼
+    def _write_csv(path, data):
+        if not data:
+            return
+        with open(path, 'w', newline='', encoding='utf-8') as cf:
+            writer = csv.DictWriter(cf, fieldnames=list(data[0].keys()))
+            writer.writeheader()
+            writer.writerows(data)
+
+    # 출력
+    os.makedirs(output_dir, exist_ok=True)
+    problem = os.path.basename(txt_file_path).split('.')[0]
+    _write_csv(os.path.join(output_dir, f'process_{problem}.csv'),   procs_data)
+    _write_csv(os.path.join(output_dir, f'operation_{problem}.csv'), ops_data)
+    _write_csv(os.path.join(output_dir, f'job_{problem}.csv'),       jobs_data)
+
+    print(f".txt 파일 변환 성공. 결과가 '{output_dir}' 폴더에 저장되었습니다.")
+    return True
+
+    # except Exception as e:
+    #     print(f".txt 파일 변환 실패: {e}")
+    #     return False
 
 def _write_csv(filepath: str, data: List[Dict]):
     """딕셔너리 리스트를 받아 CSV 파일로 저장합니다."""

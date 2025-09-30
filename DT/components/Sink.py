@@ -22,7 +22,8 @@ class Sink:
         self.env.process(self.run())
 
     def run(self):
-        job = yield self.store.get()
-        self.parts_rec += 1
-        self.last_arrival = self.env.now
-        self.monitor.record(time=self.env.now, part_id=job.id, operation=None, process=self.id, machine=None, event='Job completed')
+        while True:
+            job = yield self.store.get()
+            self.parts_rec += 1
+            self.last_arrival = self.env.now
+            self.monitor.record(time=self.env.now, part_id=job.id, operation=None, process=self.id, machine=None, event='Job completed')
