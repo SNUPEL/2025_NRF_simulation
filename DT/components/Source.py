@@ -157,7 +157,7 @@ class Source:
         elif self.routing_rule == 'LPT':
             next_process = lpt(next_operation)
         elif self.routing_rule == 'WSPT':
-            next_process = spt(next_operation)
+            next_process = wspt(next_operation)
         else:
             next_process = next_operation.process_list[0]
 
