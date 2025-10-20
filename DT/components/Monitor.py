@@ -1,34 +1,44 @@
 import pandas as pd
+from io import StringIO
 
-class Monitor(object):
-    def __init__(self, filepath, significant_digits):
-        self.filepath = filepath  ## Event tracer 저장 경로
-        self.significant_digits = significant_digits  ## 시간의 유효숫자
 
-        self.time = list()
-        self.event = list()
-        self.part = list()
-        self.operation = list()
-        self.process_name = list()
-        self.machine_name = list()
+class Monitor:
+    """
+    시뮬레이션 동안 발생하는 모든 이벤트를 기록하고,
+    최종적으로 CSV 파일로 저장하는 역할을 합니다.
+    """
 
-        self.event_tracer = pd.DataFrame(columns=['Time', 'Part', 'Operation', 'Process', 'Machine', 'Event'])
+    def __init__(self, event_log_path, significant_digits):
+        self.event_log_path = event_log_path
+        self.significant_digits = significant_digits
+        self.log_buffer = StringIO()
+        self.HEADERS = ["time", "part_id", "operation", "process", "machine", "event"]
+        self.log_buffer.write(",".join(self.HEADERS) + "\n")
+        self.event_tracer = None
 
     def record(self, time, part_id=None, operation=None, process=None, machine=None, event=None):
-        self.time.append(round(time, self.significant_digits))
-        self.event.append(event)
-        self.part.append(part_id)
-        self.operation.append(operation)
-        self.process_name.append(process)
-        self.machine_name.append(machine)
+        """하나의 이벤트 로그를 버퍼에 기록합니다."""
+        # 이벤트 이름도 저장 시 소문자로 통일
+        event_str = str(event).lower() if event else ''
+
+        log_entry = (
+            f"{round(time, self.significant_digits)},"
+            f"{part_id or ''},"
+            f"{operation or ''},"
+            f"{process or ''},"
+            f"{machine or ''},"
+            f"{event_str}\n"
+        )
+        self.log_buffer.write(log_entry)
 
     def make_event_tracer(self):
-        self.event_tracer['Time'] = self.time
-        self.event_tracer['Part'] = self.part
-        self.event_tracer['Operation'] = self.operation
-        self.event_tracer['Process'] = self.process_name
-        self.event_tracer['Machine'] = self.machine_name
-        self.event_tracer['Event'] = self.event
+        """메모리 버퍼에 저장된 로그를 pandas DataFrame으로 변환합니다."""
+        self.log_buffer.seek(0)
+        self.event_tracer = pd.read_csv(self.log_buffer)
 
     def save_event_tracer(self):
-        self.event_tracer.to_csv(self.filepath)
+        """DataFrame으로 변환된 이벤트 로그를 실제 CSV 파일로 저장합니다."""
+        if self.event_tracer is not None:
+            self.event_tracer.to_csv(self.event_log_path, index=False)
+        else:
+            print("경고: 저장할 이벤트 트레이서가 생성되지 않았습니다.")

@@ -1,13 +1,15 @@
-from io import StringIO
-
-import pandas as pd
 import simpy
 import random as rd
-from typing import List, Dict
-from DT.components.Job import Job
+from typing import List
+from .Job import Job
+
 
 class Source:
-    def __init__(self, model, monitor, id, problem_data: dict, env: simpy.Environment):
+    """
+    시뮬레이션 시스템에 작업(Job)을 생성하고 투입하는 역할을 하는 클래스입니다.
+    """
+
+    def __init__(self, model, monitor, id, problem_data, env, sequencing_rule, routing_rule):
         self.model = model
         self.monitor = monitor
         self.id = id
@@ -15,154 +17,118 @@ class Source:
         self.job_id_list = list(self.job_data.keys())
         self.operation_data = problem_data['operation_info']
         self.env = env
-
-        self.routing_rule = 'WSPT'
-        self.sequencing_rule = None
-
+        self.sequencing_rule = sequencing_rule
+        self.routing_rule = routing_rule
         self.env.process(self.job_generator())
 
     def job_generator(self):
+        """
+        문제 데이터에 정의된 모든 Job들을 생성하고 시스템에 투입하는 SimPy 프로세스입니다.
+        """
         batch_job_list = []
-        n=0
-        for job_id in self.job_id_list:
-            n += 1
-            IAT = self.job_data[job_id]['arrival_time'] - self.env.now
+        # job_data의 도착 시간을 기준으로 정렬하여 처리 (도착 시간이 빠른 순)
+        sorted_job_ids = sorted(self.job_id_list, key=lambda jid: self.job_data[jid]['arrival_time'])
+
+        for n, job_id in enumerate(sorted_job_ids, 1):
+            arrival_time = self.job_data[job_id]['arrival_time']
+            # 현재 시간보다 도착 시간이 늦다면 그 차이만큼 대기
+            if arrival_time > self.env.now:
+                # 대기 전, 이전에 쌓인 배치가 있다면 먼저 처리
+                if batch_job_list:
+                    adjusted_batch = self.sequencing(batch_job_list)
+                    for j in adjusted_batch:
+                        self.env.process(self.to_next_process(j))
+                    batch_job_list = []
+
+                yield self.env.timeout(arrival_time - self.env.now)
 
             job = Job(self.job_data[job_id], self.operation_data)
             self.monitor.record(time=self.env.now, part_id=job.id, operation=None, process=self.id, machine=None,
-                                event='Job created')
-            print(job.id, '생성:', self.env.now)
+                                event='Job Created')
+            print(f"{self.env.now:.2f}: Job {job.id} 생성됨 (도착 예정: {job.arrival_time}).")
+            batch_job_list.append(job)
 
-            if IAT == 0:
-                batch_job_list.append(job)
-                if n == len(self.job_data.keys()):
-                    adjusted_batch_job_list = self.sequencing(batch_job_list)
-                    for j in adjusted_batch_job_list:
-                        self.env.process(self.to_next_process(j))
+        # 마지막 배치가 남아있으면 처리
+        if batch_job_list:
+            adjusted_batch = self.sequencing(batch_job_list)
+            for j in adjusted_batch:
+                self.env.process(self.to_next_process(j))
 
-            else:
-                if batch_job_list:
-                    adjusted_batch_job_list = self.sequencing(batch_job_list)
-                    for j in adjusted_batch_job_list:
-                        self.env.process(self.to_next_process(j))
+    def to_next_process(self, job: Job):
+        """Job의 첫 번째 Operation을 수행할 Process로 Job을 보냅니다."""
+        next_operation = job.current_operation
+        next_process_id = self.routing(next_operation)
 
-                yield self.env.timeout(IAT)
-                self.env.process(self.to_next_process(job))
+        print(f'{self.env.now:.2f}: Job {job.id} (Op: {next_operation.id}) 첫 투입 -> Process {next_process_id}')
 
+        yield self.model[next_process_id].job_queue.put(job)
 
-    def to_next_process(self,job):
-        next_operation = job.operation_list[job.step]
-        next_process = self.routing(next_operation)
-        print('희망 다음 프로세스:', next_process)
-        if len(self.model[next_process].machines.items) - len(self.model[next_process].store.items) > 0:
-            yield self.model[next_process].store.put(job)
-        else:
-            for proc in job.operation_list[job.step].process_list:
-                yield self.model[proc].store.put(job)
-        self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id, process=next_process, machine=None, event='Job transferred')
+        self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id,
+                            process=next_process_id, machine=None, event='Job Transferred')
 
+    def sequencing(self, batch_job_list: List[Job]) -> List[Job]:
+        """동일한 시간에 도착한 작업들의 공장 투입 순서를 결정합니다."""
 
-    def sequencing(self, batch_job_list):
-        def random(job_list):
-            return rd.sample(job_list, len(job_list))
-
-        def spt(job_list):
-            # 각 job의 총 처리시간 계산
-            total_times = {job: sum([sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list]) for job in job_list}
-            # 총 처리시간 오름차순으로 정렬
-            return sorted(job_list, key=lambda j: total_times[j])
-
-        def lpt(job_list):
-            # 각 job의 총 처리시간 계산
-            total_times = {job: sum([sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list]) for job in job_list}
-            # 총 처리시간 오름차순으로 정렬
-            return sorted(job_list, key=lambda j: total_times[j], reverse=True)
-
-        def johnson(job_list):
-            # 첫 기계 vs 마지막 기계 처리시간 비교
-            first_group = []  # 첫 기계가 더 짧은 job들
-            second_group = []  # 마지막 기계가 더 짧은 job들
-
-            operation_times = {job:[sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list] for job in job_list}
-            for j in job_list:
-                if operation_times[j][0] < operation_times[j][-1]:
-                    first_group.append(j)
+        def johnson(job_list: List[Job]) -> List[Job]:
+            op_times = {
+                job: [op.get_average_processing_time() for op in job.operation_list]
+                for job in job_list
+            }
+            first_group, second_group = [], []
+            for job in job_list:
+                if op_times[job][0] < op_times[job][-1]:
+                    first_group.append(job)
                 else:
-                    second_group.append(j)
-
-            # 첫 그룹은 첫 기계 시간 오름차순
-            first_group.sort(key=lambda j: operation_times[j][0])
-            # 둘째 그룹은 마지막 기계 시간 내림차순
-            second_group.sort(key=lambda j: operation_times[j][-1], reverse=True)
-
+                    second_group.append(job)
+            first_group.sort(key=lambda j: op_times[j][0])
+            second_group.sort(key=lambda j: op_times[j][-1], reverse=True)
             return first_group + second_group
 
-        def palmer(job_list):
-            operation_times = {job:[sum(op.processing_time.values())/len(op.processing_time.values()) for op in job.operation_list] for job in job_list}
-            m = len(operation_times[job_list[0]])  # 기계 수
-            # 각 job의 Palmer 지수 계산
-            slope_index = {}
-            for j in job_list:
-                # Σ (m - 2*i + 1) * Pij, where i = 1..m
-                total = 0
-                for i, pij in enumerate(operation_times[j], start=1):
-                    weight = (m - 2 * i + 1)
-                    total += weight * pij
-                slope_index[j] = total
+        def palmer(job_list: List[Job]) -> List[Job]:
+            op_times = {
+                job: [op.get_average_processing_time() for op in job.operation_list]
+                for job in job_list
+            }
+            if not job_list: return []
+            num_machines = len(op_times[job_list[0]])
+            slope_indices = {}
+            for job in job_list:
+                index = sum((num_machines - (2 * (i + 1)) + 1) * proc_time for i, proc_time in enumerate(op_times[job]))
+                slope_indices[job] = index
+            return sorted(job_list, key=lambda j: slope_indices[j], reverse=True)
 
-            # slope_index 내림차순 정렬
-            sorted_jobs = sorted(job_list, key=lambda j: slope_index[j], reverse=True)
-            return sorted_jobs
+        def get_total_avg_time(job: Job):
+            return sum(op.get_average_processing_time() for op in job.operation_list)
 
-        def wspt(job_list):
-            # 각 job의 총 처리시간 계산
-            weighted_time = {job: min(job.operation_list[0].processing_time.values()) / job.weight for job in job_list}
-            # 총 처리시간 오름차순으로 정렬
-            return sorted(job_list, key=lambda j: weighted_time[j])
-
-        if self.sequencing_rule == 'RANDOM':
-            adjusted_batch_job_list = random(batch_job_list)
-        elif self.sequencing_rule == 'SPT':
-            adjusted_batch_job_list = spt(batch_job_list)
+        if self.sequencing_rule == 'SPT':
+            return sorted(batch_job_list, key=get_total_avg_time)
         elif self.sequencing_rule == 'LPT':
-            adjusted_batch_job_list = lpt(batch_job_list)
-        elif self.sequencing_rule == 'JOHNSON':
-            adjusted_batch_job_list = johnson(batch_job_list)
-        elif self.sequencing_rule == 'PALMER':
-            adjusted_batch_job_list = palmer(batch_job_list)
+            return sorted(batch_job_list, key=get_total_avg_time, reverse=True)
         elif self.sequencing_rule == 'WSPT':
-            adjusted_batch_job_list = wspt(batch_job_list)
-        else:
-            adjusted_batch_job_list = batch_job_list
+            return sorted(batch_job_list,
+                          key=lambda j: j.operation_list[0].get_average_processing_time() / getattr(j, 'weight', 1.0))
+        elif self.sequencing_rule == 'JOHNSON':
+            return johnson(batch_job_list)
+        elif self.sequencing_rule == 'PALMER':
+            return palmer(batch_job_list)
+        elif self.sequencing_rule == 'RANDOM':
+            rd.shuffle(batch_job_list)
+            return batch_job_list
+        else:  # FIFO
+            return batch_job_list
 
-        return adjusted_batch_job_list
+    def routing(self, operation) -> str:
+        """하나의 Operation을 처리할 수 있는 여러 Process 중 하나를 선택합니다."""
+        if len(operation.process_list) == 1:
+            return operation.process_list[0]
 
-    def routing(self, next_operation):
-        def random(operation):
-            return rd.choice(operation.process_list)
+        proc_times = operation.get_process_time_map()
 
-        def spt(operation):
-            return min(operation.processing_time, key=operation.processing_time.get)
-
-        def lpt(operation):
-            return max(operation.processing_time, key=operation.processing_time.get)
-
-        def wspt(operation):
-            return min(operation.processing_time, key=operation.processing_time.get)
-
-        if self.routing_rule == 'RANDOM':
-            next_process = random(next_operation)
-        elif self.routing_rule == 'SPT':
-            next_process = spt(next_operation)
+        if self.routing_rule in ['SPT', 'WSPT']:
+            return min(proc_times, key=proc_times.get)
         elif self.routing_rule == 'LPT':
-            next_process = lpt(next_operation)
-        elif self.routing_rule == 'WSPT':
-            next_process = wspt(next_operation)
-        else:
-            next_process = next_operation.process_list[0]
-
-
-        return next_process
-
-
-
+            return max(proc_times, key=proc_times.get)
+        elif self.routing_rule == 'RANDOM':
+            return rd.choice(operation.process_list)
+        else:  # 기본값
+            return operation.process_list[0]
