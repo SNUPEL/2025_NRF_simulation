@@ -124,7 +124,9 @@ class Source:
 
         proc_times = operation.get_process_time_map()
 
-        if self.routing_rule in ['SPT', 'WSPT']:
+        if self.routing_rule == 'SPT':
+            return min(proc_times, key=proc_times.get)
+        elif self.routing_rule == 'WSPT':
             return min(proc_times, key=proc_times.get)
         elif self.routing_rule == 'LPT':
             return max(proc_times, key=proc_times.get)
