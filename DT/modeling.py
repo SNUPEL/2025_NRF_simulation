@@ -83,8 +83,8 @@ def main():
     is_bench_marking = True
     significant_digits = 10
 
-    PROBLEM_TYPE = "PMSP"
-    problem_name = "MJ5-200NC1"
+    PROBLEM_TYPE = "PFSP"
+    problem_name = "ta001"
 
     DATA_FOLDER = "data"
     PROBLEM_FOLDER = "problem"
@@ -109,21 +109,21 @@ def main():
     log_output_path = os.path.join(results_dir, f"event_log_{problem_name}.csv")
 
     if PROBLEM_TYPE == "JSSP":
-        SEQUENCING_RULE = "FIFO"
-        ROUTING_RULE = "SPT"
-        DISPATCHING_RULE = "MWKR"
+        SEQUENCING_RULE = "FIFO"            ### JSSP에서 SEQUENCING은 FIFO로 고정
+        ROUTING_RULE = "FIFO"               ### JSSP에서 ROUTING은 의미 없음
+        DISPATCHING_RULE = "SPT"            ### DISPATCHING rule 선택(SPT, WSPT, LPT, MWKR, LWKR, RANDOM, FIFO)
     elif PROBLEM_TYPE == "PFSP":
-        SEQUENCING_RULE = "PALMER"
-        ROUTING_RULE = "SPT"
-        DISPATCHING_RULE = "FIFO"
+        SEQUENCING_RULE = "PALMER"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
+        ROUTING_RULE = "FIFO"                ### PFSP에서 ROUTING은 의미 없음
+        DISPATCHING_RULE = "FIFO"           ### PFSP에서 DISPATCHING은 FIFO로 고정
     elif PROBLEM_TYPE == "PMSP":
-        SEQUENCING_RULE = "WSPT"
-        ROUTING_RULE = "WSPT"
-        DISPATCHING_RULE = "WSPT"
+        SEQUENCING_RULE = "WSPT"            ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
+        ROUTING_RULE = "WSPT"               ### ROUTING rule 선택(SPT, WSPT, LPT, RANDOM, DEFALT)
+        DISPATCHING_RULE = "WSPT"           ### DISPATCHING rule 선택(SPT, WSPT, LPT, MWKR, LWKR, RANDOM, FIFO)
     else:
-        SEQUENCING_RULE = "RANDOM"
-        ROUTING_RULE = "RANDOM"
-        DISPATCHING_RULE = "RANDOM"
+        SEQUENCING_RULE = "RANDOM"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
+        ROUTING_RULE = "RANDOM"             ### ROUTING rule 선택(SPT, WSPT, LPT, RANDOM, DEFALT)
+        DISPATCHING_RULE = "RANDOM"         ### DISPATCHING rule 선택(SPT, WSPT, LPT, MWKR, LWKR, RANDOM, FIFO)
 
     monitor = run_simulation(data_dict, log_output_path, SEQUENCING_RULE, ROUTING_RULE, DISPATCHING_RULE,
                              significant_digits)

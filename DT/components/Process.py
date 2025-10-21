@@ -28,6 +28,7 @@ class Process:
         공정의 메인 실행 로직. 가용한 기계와 대기 작업이 있으면 작업을 할당합니다.
         """
         while True:
+            yield self.env.timeout(1e-13)
             machine = yield self.machines.get()
 
             if len(self.job_queue.items) > 1:
@@ -35,6 +36,11 @@ class Process:
                 job = yield self.job_queue.get(lambda item: item.id == selected_job.id)
             else:
                 job = yield self.job_queue.get()
+
+            for proc in self.model.values():
+                if proc is not self and isinstance(proc, Process):
+                    if job in proc.job_queue.items:
+                        proc.job_queue.items.remove(job)
 
             self.monitor.record(time=self.env.now, part_id=job.id, operation=job.current_operation.id,
                                 process=self.id, machine=machine, event='Job Assigned')
