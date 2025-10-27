@@ -61,11 +61,12 @@ class Source:
 
         print(f'{self.env.now:.2f}: Job {job.id} (Op: {next_operation.id}) 첫 투입 -> Process {next_process_id}')
 
-        if len(self.model[next_process_id].machines.items) - len(self.model[next_process_id].job_queue.items) > 0:
-            yield self.model[next_process_id].job_queue.put(job)
-        else:
-            for proc in job.operation_list[job.step].process_list:
-                yield self.model[proc].job_queue.put(job)
+        yield self.model[next_process_id].job_queue.put(job)
+        # if len(self.model[next_process_id].machines.items) - len(self.model[next_process_id].job_queue.items) > 0:
+        #     yield self.model[next_process_id].job_queue.put(job)
+        # else:
+        #     for proc in job.operation_list[job.step].process_list:
+        #         yield self.model[proc].job_queue.put(job)
 
         self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id,
                             process=next_process_id, machine=None, event='Job Transferred')

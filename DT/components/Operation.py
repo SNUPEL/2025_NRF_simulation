@@ -8,8 +8,11 @@ class Operation:
     def __init__(self, op_info: Dict):
         self.id: str = op_info['id']
 
-        # 이 Operation을 처리할 수 있는 Process(기계)의 ID 리스트
+        # 이 Operation가 이루어질 수 있는 Process의 ID 리스트
         self.process_list: List[str] = op_info['process']
+
+        # 이 Operation을 처리할 수 있는 Machine(기계)의 ID 리스트
+        self.machine_list: List[str] = op_info['machine']
 
         # process_list의 각 Process에 해당하는 처리 시간 리스트
         self.processing_time: List[float] = op_info['processing_time']
@@ -18,14 +21,14 @@ class Operation:
         # self.processing_time = {operation_data['process'][i]: operation_data['processing_time'][i] for i in
         #                         range(len(operation_data['process']))}
 
-    def get_processing_time_for_process(self, process_id: str) -> float:
+    def get_processing_time_for_machine(self, machine_id: str) -> float:
         """특정 Process ID에 해당하는 처리 시간을 반환합니다."""
-        try:
-            idx = self.process_list.index(process_id)
-            return self.processing_time[idx]
-        except (ValueError, IndexError):
-            # 해당 process_id가 리스트에 없거나 인덱스가 잘못된 경우
-            return float('inf')
+        # try:
+        idx = self.machine_list.index(machine_id)
+        return self.processing_time[idx]
+        # except (ValueError, IndexError):
+        #     # 해당 process_id가 리스트에 없거나 인덱스가 잘못된 경우
+        #     return float('inf')
 
     def get_average_processing_time(self) -> float:
         """이 Operation의 평균 처리 시간을 계산합니다."""

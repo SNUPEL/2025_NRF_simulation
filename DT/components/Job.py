@@ -20,6 +20,7 @@ class Job:
             if key not in assigned_keys:
                 setattr(self, key, value)
 
+        self.current_process = None
         self.step: int = 0  # 현재 진행 중인 operation_list의 인덱스
         self.completion_time: float = -1.0  # 완료 시간 (-1은 미완료 의미)
 

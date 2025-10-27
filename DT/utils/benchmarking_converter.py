@@ -66,8 +66,8 @@ def _parse_pmsp_to_rows(txt_file_path: str) -> List[Dict]:
             row = {
                 'arrival_time': 0.0,
                 'job': job_id,
-                'operation': f"{job_id}_O1",
-                'process': machine_id,
+                'operation': "O1",
+                'process': "P1",
                 'machine': machine_id,
                 'capacity': 1,
                 'processing_time': float(machines_raw[i][j]),
@@ -95,8 +95,8 @@ def _parse_jssp_to_rows(txt_file_path: str) -> List[Dict]:
             row = {
                 'arrival_time': 0.0,
                 'job': job_id,
-                'operation': f"{job_id}_O{j + 1}",
-                'process': machine_id,
+                'operation': f"O{j + 1}",
+                'process': f"P{j + 1}",
                 'machine': machine_id,
                 'capacity': 1,
                 'processing_time': float(proc_time)
@@ -127,8 +127,8 @@ def _parse_pfsp_to_rows(txt_file_path: str) -> List[Dict]:
                 row = {
                     'arrival_time': 0.0,
                     'job': job_id,
-                    'operation': f"{job_id}_O{j + 1}",
-                    'process': machine_id,
+                    'operation': f"O{j + 1}",
+                    'process': f"P{j + 1}",
                     'machine': machine_id,
                     'capacity': 1,
                     'processing_time': float(proc_time)
