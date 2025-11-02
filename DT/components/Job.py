@@ -10,6 +10,8 @@ class Job:
     def __init__(self, job_info: Dict, operations_data: Dict):
         self.id: str = job_info['id']
         self.arrival_time: float = job_info['arrival_time']
+        if "weight" in job_info:
+            self.weight = job_info['weight']
 
         self.operation_list: List[Operation] = [
             Operation(operations_data[op_id]) for op_id in job_info['operations']
