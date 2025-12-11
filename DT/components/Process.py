@@ -32,7 +32,7 @@ class Process:
             job.current_process = self
             yield self.env.timeout(1e-14)
             for machine_type in job.current_operation.machine_list:
-                self.resource['Machines'].machine_dict[machine_type].job_queue.put(job)
+                self.resource['Machine_pool'].machine_dict[machine_type].job_queue.put(job)
 
     # def get_machine(self, job):
     #     machine = yield self.resource['Machines'].machines.get(lambda item: item.type in job.current_operation.machine_list)

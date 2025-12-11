@@ -12,7 +12,7 @@ from DT.components.Sink import Sink
 from DT.components.Monitor import Monitor
 from DT.components.Job import Job
 from DT.components.Operation import Operation
-from DT.components.Machine import Machines
+from DT.components.Machine import Machine_pool
 
 
 def load_data_from_unified_csv(data_dir: str, problem_name: str) -> Optional[Dict]:
@@ -85,7 +85,7 @@ def run_simulation(problem_data: Dict, event_log_path: str, sequencing_rule: str
     resource = {}
     monitor = Monitor(event_log_path, significant_digits)
 
-    resource['Machines'] = Machines(problem_data, env, dispatching_rule)
+    resource['Machine_pool'] = Machine_pool(problem_data, env, dispatching_rule)
 
     model['Source'] = Source(model, monitor, 'Source', problem_data, env, sequencing_rule, routing_rule)
     model['Sink'] = Sink(model, monitor, 'Sink', env)
@@ -102,15 +102,16 @@ def main():
     is_bench_marking = True
     significant_digits = 10
 
-    PROBLEM_TYPE = "PMSP"
-    problem_name = "MJ5-200NC1"
+    PROBLEM_TYPE = "PFSP"
+    problem_name = "la01"
 
-    DATA_FOLDER = "data"
-    PROBLEM_FOLDER = "problem"
+    DATA_ROOT = "data"
+    DATA_FOLDER = "preprocessed"
+    PROBLEM_FOLDER = "raw"
     RESULTS_FOLDER = "results"
 
-    data_dir = os.path.join(dt_folder_path, DATA_FOLDER)
-    problem_dir = os.path.join(dt_folder_path, PROBLEM_FOLDER, PROBLEM_TYPE)
+    data_dir = os.path.join(dt_folder_path, DATA_ROOT, DATA_FOLDER)
+    problem_dir = os.path.join(dt_folder_path, DATA_ROOT, PROBLEM_FOLDER, PROBLEM_TYPE)
     results_dir = os.path.join(dt_folder_path, RESULTS_FOLDER)
 
     os.makedirs(data_dir, exist_ok=True)
@@ -132,7 +133,7 @@ def main():
         ROUTING_RULE = "FIFO"               ### JSSP에서 ROUTING은 의미 없음
         DISPATCHING_RULE = "SPT"            ### DISPATCHING rule 선택(SPT, WSPT, LPT, MWKR, LWKR, RANDOM, FIFO)
     elif PROBLEM_TYPE == "PFSP":
-        SEQUENCING_RULE = "JOHNSON"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
+        SEQUENCING_RULE = "FIFO"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
         ROUTING_RULE = "FIFO"                ### PFSP에서 ROUTING은 의미 없음
         DISPATCHING_RULE = "FIFO"           ### PFSP에서 DISPATCHING은 FIFO로 고정
     elif PROBLEM_TYPE == "PMSP":

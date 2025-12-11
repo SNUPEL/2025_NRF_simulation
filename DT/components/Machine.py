@@ -4,7 +4,7 @@ from typing import List, Dict, Union
 from DT.components import Job
 
 
-class Machines:
+class Machine_pool:
     """
     Operation을 진행하기 위해 필요한 '기계(Machine)'를 관리하기 위한 클래스입니다.
     """
@@ -17,13 +17,13 @@ class Machines:
         for machine_info in self.machine_data.values():
             self.machine_dict[machine_info['id']] = []
             for i in range(machine_info['capacity']):
-                machine = Machine(machine_info['id'], machine_info['id'] + f"_{i + 1}", machine_info['processes'], env, dispatching_rule, self)
+                machine = Machines(machine_info['id'], machine_info['id'] + f"_{i + 1}", machine_info['processes'], env, dispatching_rule, self)
                 self.machine_dict[machine_info['id']] = machine
                 self.machine_list.append(machine)
                 self.env.process(machine.run(self))
                 self.machine_store.put(machine)
 
-class Machine:
+class Machines:
     """
     Operation을 진행하기 위해 필요한 '기계(Machine)' 나타내는 클래스입니다.
     """
