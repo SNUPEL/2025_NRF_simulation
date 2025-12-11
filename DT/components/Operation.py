@@ -40,5 +40,9 @@ class Operation:
         """Process ID를 키로, 처리 시간을 값으로 하는 딕셔너리를 반환합니다."""
         return dict(zip(self.process_list, self.processing_time))
 
+    def get_process_time_map2(self) -> Dict[str, float]:
+        """Process ID를 키로, 처리 시간을 값으로 하는 딕셔너리를 반환합니다."""
+        return dict(zip(self.process_list, self.processing_time))
+
     def __repr__(self):
         return f"Operation(name={self.id}, machine={self.process_list}, time={self.processing_time})"

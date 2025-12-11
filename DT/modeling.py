@@ -95,7 +95,7 @@ def run_simulation(problem_data: Dict, event_log_path: str, sequencing_rule: str
     model['Source'] = Source(model, monitor, 'Source', problem_data, env, sequencing_rule, routing_rule)
     model['Sink'] = Sink(model, monitor, 'Sink', env)
     for proc_id in problem_data.get('process_list', []):
-        process_instance = Process(model, resource, monitor, proc_id, problem_data, env, dispatching_rule)
+        process_instance = Process(model, resource, monitor, proc_id, problem_data, env, dispatching_rule, routing_rule)
         model[proc_id] = process_instance
     env.run()
     print("시뮬레이션 종료.")
@@ -309,7 +309,7 @@ def main():
     significant_digits = 10
 
     PROBLEM_TYPE = "PFSP"
-    problem_name = "la01"
+    problem_name = "test_PFSP"
 
     DATA_ROOT = "data"
     DATA_FOLDER = "preprocessed"
@@ -339,7 +339,7 @@ def main():
         ROUTING_RULE = "FIFO"               ### JSSP에서 ROUTING은 의미 없음
         DISPATCHING_RULE = "SPT"            ### DISPATCHING rule 선택(SPT, WSPT, LPT, MWKR, LWKR, RANDOM, FIFO)
     elif PROBLEM_TYPE == "PFSP":
-        SEQUENCING_RULE = "FIFO"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
+        SEQUENCING_RULE = "SPT"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
         ROUTING_RULE = "FIFO"                ### PFSP에서 ROUTING은 의미 없음
         DISPATCHING_RULE = "FIFO"           ### PFSP에서 DISPATCHING은 FIFO로 고정
     elif PROBLEM_TYPE == "PMSP":
@@ -362,5 +362,5 @@ def main():
     plot_gantt_chart(log_output_path)
 
 if __name__ == "__main__":
-    # main()
-    run_all_problems()
+    main()
+    # run_all_problems()

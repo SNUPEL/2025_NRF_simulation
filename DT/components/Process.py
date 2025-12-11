@@ -6,7 +6,7 @@ class Process:
     """
     하나의 '공정(Process)' 또는 '워크스테이션(Workstation)'을 나타내는 클래스입니다.
     """
-    def __init__(self, model, resource, monitor, id, problem_data, env, dispatching_rule):
+    def __init__(self, model, resource, monitor, id, problem_data, env, dispatching_rule, routing_rule):
         self.model = model
         self.resource = resource
         self.monitor = monitor
@@ -14,6 +14,7 @@ class Process:
         self.proc_data = problem_data['machine_info']
         self.env = env
         self.dispatching_rule = dispatching_rule
+        self.routing_rule = routing_rule
 
         self.job_queue = simpy.FilterStore(self.env)
 
@@ -110,3 +111,21 @@ class Process:
 
         else:  # FIFO
             return queue[0]
+
+    def routing(self, operation) -> str:
+        """하나의 Operation을 처리할 수 있는 여러 Process 중 하나를 선택합니다."""
+        if len(operation.process_list) == 1:
+            return operation.process_list[0]
+
+        proc_times = operation.get_process_time_map2()
+
+        if self.routing_rule == 'SPT':
+            return min(proc_times, key=proc_times.get)
+        elif self.routing_rule == 'WSPT':
+            return min(proc_times, key=proc_times.get)
+        elif self.routing_rule == 'LPT':
+            return max(proc_times, key=proc_times.get)
+        elif self.routing_rule == 'RANDOM':
+            return rd.choice(operation.process_list)
+        else:  # 기본값
+            return operation.process_list[0]
