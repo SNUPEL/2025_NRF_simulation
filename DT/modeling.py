@@ -3,6 +3,11 @@ import pandas as pd
 import sys
 import os
 from typing import Dict, Optional
+import json
+
+from statsmodels.graphics.tukeyplot import results
+from streamlit import columns
+from sympy import pprint
 
 from DT.utils.benchmarking_converter import convert_banchmarking_data
 from DT.utils.postprocessing import plot_gantt_chart
@@ -97,6 +102,207 @@ def run_simulation(problem_data: Dict, event_log_path: str, sequencing_rule: str
     return monitor
 
 
+def get_problem_names(folder_path):
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"지정된 경로가 폴더가 아닙니다: {folder_path}")
+
+    file_names = []
+    for file in os.listdir(folder_path):
+        full_path = os.path.join(folder_path, file)
+        if os.path.isfile(full_path):
+            name, _ = os.path.splitext(file)
+            file_names.append(name)
+
+    return file_names
+
+def parse_jssp_results(result_path):
+    df = pd.read_csv(result_path)
+    data_dict = {
+        row["Instance"].lower(): {
+            "spt": row["SPT Solution"]
+        }
+        for _, row in df.iterrows()
+    }
+    return data_dict
+
+def parse_pfsp_optimums(data_path):
+    df = pd.read_csv(data_path)
+
+    data_dict = {
+        row["Name"].lower(): {
+        "n": row["n"],
+        "m": row["m"],
+        "LB": row["LB"],
+        "UB": row["UB"],
+        "Optimal": row["Optimal"],
+        "UBFoundBy": row["UBFoundBy"],
+        "Permutation": row["Permutation"],
+        }
+        for _, row in df.iterrows()
+    }
+    return data_dict
+
+
+def parse_pmsp_optimums(data_path):
+    df = pd.read_csv(data_path)
+    ofv_dict = dict(zip(df["name"], df["OFV"]))
+    return ofv_dict
+
+
+def get_ofv_time(event_df: pd.DataFrame,
+                 weights: dict,
+                 completion_events=("job completed", "job transferred to sink"),
+                 fallback_event="operation complete"):
+
+    df = event_df.copy()
+    df["event"] = df["event"].astype(str).str.lower()
+
+    df["time"] = pd.to_numeric(df["time"], errors="coerce")
+    df = df.dropna(subset=["part_id", "time"])
+
+    def _completion_time(g):
+        g_sorted = g.sort_values("time")
+
+        m1 = g_sorted[g_sorted["event"].isin([e.lower() for e in completion_events])]
+
+        if not m1.empty:
+            return m1["time"].max()
+
+        m2 = g_sorted[g_sorted["event"].eq(fallback_event.lower())]
+
+        if not m2.empty:
+            return m2["time"].max()
+
+        return g_sorted["time"].max()
+
+    C = df.groupby("part_id", as_index=True).apply(_completion_time, include_groups=False).rename("Cj")
+
+    # 가중치 결합
+    w = pd.Series(weights, name="wj")
+
+    summary = pd.DataFrame(C).join(w, how="left")
+
+    # 가중치가 없으면 0을 처리
+    missing = summary["wj"].isna().sum()
+
+    if missing:
+        summary["wj"] = summary["wj"].fillna(0)
+
+    summary["contrib"] = summary["wj"] * summary["Cj"]
+
+    ofv = summary["contrib"].sum()
+
+    return ofv
+
+def run_all_problems():
+    dt_folder_path = os.path.dirname(os.path.abspath(__file__))
+    is_bench_marking = True
+    significant_digits = 10
+
+    # PROBLEM_TYPES = {"PMSP", "PFSP", "JSSP"}
+    PROBLEM_TYPES = {"JSSP"}
+    BASELINE_FOLDER = "baseline"
+    DATA_FOLDER = "data"
+    PROBLEM_FOLDER = "problem"
+    RESULTS_FOLDER = "result"
+
+    data_dir = os.path.join(dt_folder_path, DATA_FOLDER)
+    baseline_dir = os.path.join(dt_folder_path, BASELINE_FOLDER)
+    results_dir = os.path.join(dt_folder_path, RESULTS_FOLDER)
+
+    jssp_spt_makespan = parse_jssp_results(os.path.join(baseline_dir, "JSSP_SPT_Solution.csv"))
+    pmsp_optimums = parse_pmsp_optimums(os.path.join(baseline_dir, "PMSP_OFV_Table.csv"))
+    pfsp_optimums = parse_pfsp_optimums(os.path.join(baseline_dir, "Taillard_UB_Schedules OBrunner.csv"))
+
+    errors = {}
+    df_makespans = []
+
+    for PROBLEM_TYPE in PROBLEM_TYPES:
+        problem_dir = os.path.join(dt_folder_path, PROBLEM_FOLDER, PROBLEM_TYPE)
+
+        problem_names = get_problem_names(problem_dir)
+
+        df_makespan = pd.DataFrame(columns=["problem name"])
+
+        os.makedirs(data_dir, exist_ok=True)
+        os.makedirs(results_dir, exist_ok=True)
+
+        for problem_name in problem_names:
+            try:
+                if is_bench_marking:
+                    txt_file_path = os.path.join(problem_dir, f"{problem_name}.txt")
+                    convert_banchmarking_data(txt_file_path, data_dir, PROBLEM_TYPE)
+
+                data_dict = load_data_from_unified_csv(data_dir, problem_name)
+                if not data_dict:
+                    print("데이터 로딩에 실패하여 프로그램을 종료합니다.")
+                    errors[f"{PROBLEM_TYPE}-{problem_name}"] = "Data Loading Failed"
+                    continue
+
+                log_output_path = os.path.join(results_dir, f"{problem_name}_event_log.csv")
+
+                if PROBLEM_TYPE == "JSSP":
+                    SEQUENCING_RULE = "FIFO"
+                    ROUTING_RULE = "FIFO"
+                    DISPATCHING_RULE = "SPT"
+                elif PROBLEM_TYPE == "PFSP":
+                    SEQUENCING_RULE = "JOHNSON"
+                    ROUTING_RULE = "FIFO"
+                    DISPATCHING_RULE = "FIFO"
+                elif PROBLEM_TYPE == "PMSP":
+                    SEQUENCING_RULE = "WSPT"
+                    ROUTING_RULE = "WSPT"
+                    DISPATCHING_RULE = "WSPT"
+                else:
+                    SEQUENCING_RULE = "RANDOM"
+                    ROUTING_RULE = "RANDOM"
+                    DISPATCHING_RULE = "RANDOM"
+
+                monitor = run_simulation(data_dict, log_output_path, SEQUENCING_RULE, ROUTING_RULE, DISPATCHING_RULE, significant_digits)
+                monitor.make_event_tracer()
+                monitor.save_event_tracer()
+
+
+                if PROBLEM_TYPE == "JSSP":
+                    makespan = {"problem name": problem_name,
+                                "time": monitor.event_tracer.tail(1)["time"].iloc[0],
+                                "SPT": jssp_spt_makespan[problem_name.lower()]["spt"] if problem_name in jssp_spt_makespan else ""}
+                elif PROBLEM_TYPE == "PFSP":
+                    makespan = {"problem name": problem_name,
+                                "time": monitor.event_tracer.tail(1)["time"].iloc[0],
+                                "LB": pfsp_optimums[problem_name]["LB"],
+                                "UB": pfsp_optimums[problem_name]["UB"]}
+                elif PROBLEM_TYPE == "PMSP":
+                    weights = {job_id: info["weight"] for job_id, info in data_dict["job_info"].items()}
+                    ofv_time = get_ofv_time(monitor.event_tracer, weights,
+                                 completion_events="job completed")
+                    makespan = {"problem name": problem_name,
+                                "time": str(int(ofv_time)),
+                                "optimum": pmsp_optimums[problem_name.lower()] if problem_name.lower() in pmsp_optimums else "",
+                                "LB": "",
+                                "UB": ""}
+                else:
+                    makespan = {"problem name": "",
+                                "time": "",
+                                "optimum": ""}
+                df_makespan = pd.concat([df_makespan, pd.DataFrame([makespan])], ignore_index=True)
+
+                plot_gantt_chart(log_output_path)
+
+            except Exception as e:
+                errors[f"{PROBLEM_TYPE}-{problem_name}"] = str(e)
+                continue
+        df_makespans.append((f"{PROBLEM_TYPE}", df_makespan))
+        # df_makespan.to_csv(os.path.join(f"{results_dir}",f"makespans_{PROBLEM_TYPE}.csv"), index=False)
+
+    with pd.ExcelWriter(os.path.join(results_dir, "makespans.xlsx"), engine='openpyxl') as writer:
+        for sheet_name, df in df_makespans:
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    if len(errors) > 0:
+        pprint(errors)
+
+
 def main():
     dt_folder_path = os.path.dirname(os.path.abspath(__file__))
     is_bench_marking = True
@@ -156,4 +362,5 @@ def main():
     plot_gantt_chart(log_output_path)
 
 if __name__ == "__main__":
-    main()
+    # main()
+    run_all_problems()
