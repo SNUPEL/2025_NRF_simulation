@@ -43,6 +43,9 @@ class Source:
                 yield self.env.timeout(arrival_time - self.env.now)
 
             job = Job(self.job_data[job_id], self.operation_data)
+
+            self.monitor.job_list.append(job)
+
             self.monitor.record(time=self.env.now, part_id=job.id, operation=None, process=self.id, machine=None,
                                 event='Job Created')
             print(f"{self.env.now:.2f}: Job {job.id} 생성됨 (도착 예정: {job.arrival_time}).")
@@ -57,16 +60,12 @@ class Source:
     def to_next_process(self, job: Job):
         """Job의 첫 번째 Operation을 수행할 Process로 Job을 보냅니다."""
         next_operation = job.current_operation
-        next_process_id = self.routing(next_operation)
+        # next_process_id = self.routing(job)
+        next_process_id = next_operation.process_list[0]
 
         print(f'{self.env.now:.2f}: Job {job.id} (Op: {next_operation.id}) 첫 투입 -> Process {next_process_id}')
 
         yield self.model[next_process_id].job_queue.put(job)
-        # if len(self.model[next_process_id].machines.items) - len(self.model[next_process_id].job_queue.items) > 0:
-        #     yield self.model[next_process_id].job_queue.put(job)
-        # else:
-        #     for proc in job.operation_list[job.step].process_list:
-        #         yield self.model[proc].job_queue.put(job)
 
         self.monitor.record(time=self.env.now, part_id=job.id, operation=next_operation.id,
                             process=next_process_id, machine=None, event='Job Transferred')
@@ -109,9 +108,11 @@ class Source:
             return sorted(batch_job_list, key=get_total_avg_time)
         elif self.sequencing_rule == 'LPT':
             return sorted(batch_job_list, key=get_total_avg_time, reverse=True)
+        elif self.sequencing_rule == "FSPT":
+            return sorted(batch_job_list, key=lambda j: j.operation_list[0].get_average_processing_time())
         elif self.sequencing_rule == 'WSPT':
             return sorted(batch_job_list,
-                          key=lambda j: j.operation_list[0].get_average_processing_time() / getattr(j, 'weight', 1.0))
+                          key=lambda j: j.operation_list[0].get_average_processing_time() * getattr(j, 'weight', 1.0))
         elif self.sequencing_rule == 'JOHNSON':
             return johnson(batch_job_list)
         elif self.sequencing_rule == 'PALMER':
@@ -122,8 +123,9 @@ class Source:
         else:  # FIFO
             return batch_job_list
 
-    def routing(self, operation) -> str:
+    def routing(self, job) -> str:
         """하나의 Operation을 처리할 수 있는 여러 Process 중 하나를 선택합니다."""
+        operation = job.current_operation
         if len(operation.process_list) == 1:
             return operation.process_list[0]
 

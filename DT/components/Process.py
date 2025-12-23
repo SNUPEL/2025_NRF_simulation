@@ -24,39 +24,33 @@ class Process:
         """
         공정의 메인 실행 로직. 가용한 기계와 대기 작업이 있으면 작업을 할당합니다.
         """
+        yield self.env.timeout(0)
         while True:
-            if len(self.job_queue.items) > 1:
-                selected_job = self._dispatch()
-                job = yield self.job_queue.get(lambda item: item.id == selected_job.id)
-            else:
-                job = yield self.job_queue.get()
+            job = yield self.job_queue.get()
             job.current_process = self
-            yield self.env.timeout(1e-14)
-            for machine_type in job.current_operation.machine_list:
-                self.resource['Machine_pool'].machine_dict[machine_type].job_queue.put(job)
 
-    # def get_machine(self, job):
-    #     machine = yield self.resource['Machines'].machines.get(lambda item: item.type in job.current_operation.machine_list)
-    #     for proc in self.model.values():
-    #         if proc is not self and isinstance(proc, Process):
-    #             if job in proc.job_queue.items:
-    #                 proc.job_queue.items.remove(job)
-    #
-    #     self.monitor.record(time=self.env.now, part_id=job.id, operation=job.current_operation.id,
-    #                         process=self.id, machine=machine.type, event='Job Assigned')
-    #     self.env.process(self.processing(job, machine))
-    #
-    # def processing(self, job: Job, machine: str):
-    #     """실제 작업 처리를 모델링합니다."""
-    #     operation = job.current_operation
-    #     processing_time = operation.get_processing_time_for_machine(machine.type)
-    #
-    #     yield self.env.timeout(processing_time)
-    #
-    #     self.monitor.record(time=self.env.now, part_id=job.id, operation=operation.id,
-    #                         process=self.id, machine=machine.type, event='Operation Complete')
-    #
-    #     self.env.process(self.to_next_process(job, machine))
+            masking = {machine:False for machine in job.current_operation.machine_list}
+            while True:
+                selected_machine = self.routing(job, masking)
+
+                # 모두 마스킹된 경우: 전부에 put
+                if selected_machine is None:
+                    for machine_type in job.current_operation.machine_list:
+                        self.resource['Machine_pool'].machine_dict[machine_type].job_queue.put(job)
+                        job.status = "waiting"
+                    break
+
+                target_m = self.resource['Machine_pool'].machine_dict[selected_machine]
+
+                if not target_m.working:
+                    target_m.job_queue.put(job)
+                    target_m.working = True
+                    job.status = 'working'
+                    break
+                else:
+                    # 이 설비는 사용 불가 → 마스킹
+                    masking[selected_machine] = True
+                    # while 한번 더 돌면서 다른 설비 선택
 
     def to_next_process(self, job: Job, machine: str):
         """작업을 다음 공정이나 Sink로 보내고, 사용한 기계를 반납합니다."""
@@ -64,7 +58,7 @@ class Process:
 
         if not job.is_completed():
             next_operation = job.current_operation
-            next_process_id = self.model['Source'].routing(next_operation)
+            next_process_id = next_operation.process_list[0]
 
             print(f'{self.env.now:.2f}: Job {job.id} (Op: {next_operation.id}) -> Process {next_process_id}')
 
@@ -112,20 +106,32 @@ class Process:
         else:  # FIFO
             return queue[0]
 
-    def routing(self, operation) -> str:
+    def routing(self, job, masking={}) -> str:
         """하나의 Operation을 처리할 수 있는 여러 Process 중 하나를 선택합니다."""
-        if len(operation.process_list) == 1:
-            return operation.process_list[0]
+        operation = job.current_operation
 
-        proc_times = operation.get_process_time_map2()
+        available_machines = [
+            p for p in operation.machine_list
+            if not masking.get(p, False)  # 예: 딕셔너리 형태일 때
+        ]
+
+        if len(available_machines) == 0:
+            # 모두 마스킹된 경우에 어떻게 처리할지 정책 필요
+            return None  # 또는 예외 등
+
+        if len(available_machines) == 1:
+            return available_machines[0]
+
+        proc_times = operation.get_machine_process_time_map()
 
         if self.routing_rule == 'SPT':
-            return min(proc_times, key=proc_times.get)
+            return min(available_machines, key=lambda p: proc_times[p])
         elif self.routing_rule == 'WSPT':
-            return min(proc_times, key=proc_times.get)
+            return min(available_machines, key=lambda p: proc_times[p] * getattr(job, 'weight', 1.0))
         elif self.routing_rule == 'LPT':
-            return max(proc_times, key=proc_times.get)
+            return max(available_machines, key=lambda p: proc_times[p])
         elif self.routing_rule == 'RANDOM':
-            return rd.choice(operation.process_list)
-        else:  # 기본값
-            return operation.process_list[0]
+            return rd.choice(available_machines)
+        else:
+            return available_machines[0]
+

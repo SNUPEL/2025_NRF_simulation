@@ -90,7 +90,8 @@ def run_simulation(problem_data: Dict, event_log_path: str, sequencing_rule: str
     resource = {}
     monitor = Monitor(event_log_path, significant_digits)
 
-    resource['Machine_pool'] = Machine_pool(problem_data, env, dispatching_rule)
+
+    resource['Machine_pool'] = Machine_pool(monitor, problem_data, env, dispatching_rule)
 
     model['Source'] = Source(model, monitor, 'Source', problem_data, env, sequencing_rule, routing_rule)
     model['Sink'] = Sink(model, monitor, 'Sink', env)
@@ -199,14 +200,17 @@ def run_all_problems():
     is_bench_marking = True
     significant_digits = 10
 
-    # PROBLEM_TYPES = {"PMSP", "PFSP", "JSSP"}
-    PROBLEM_TYPES = {"JSSP"}
+    PROBLEM_TYPES = {"PMSP", "PFSP", "JSSP"}
+    # PROBLEM_TYPES = {"JSSP"}
     BASELINE_FOLDER = "baseline"
-    DATA_FOLDER = "data"
-    PROBLEM_FOLDER = "problem"
-    RESULTS_FOLDER = "result"
 
-    data_dir = os.path.join(dt_folder_path, DATA_FOLDER)
+
+    DATA_ROOT = "data"
+    DATA_FOLDER = "preprocessed"
+    PROBLEM_FOLDER = "raw"
+    RESULTS_FOLDER = "results"
+
+    data_dir = os.path.join(dt_folder_path, DATA_ROOT, DATA_FOLDER)
     baseline_dir = os.path.join(dt_folder_path, BASELINE_FOLDER)
     results_dir = os.path.join(dt_folder_path, RESULTS_FOLDER)
 
@@ -218,7 +222,7 @@ def run_all_problems():
     df_makespans = []
 
     for PROBLEM_TYPE in PROBLEM_TYPES:
-        problem_dir = os.path.join(dt_folder_path, PROBLEM_FOLDER, PROBLEM_TYPE)
+        problem_dir = os.path.join(dt_folder_path, DATA_ROOT, PROBLEM_FOLDER, PROBLEM_TYPE)
 
         problem_names = get_problem_names(problem_dir)
 
@@ -239,10 +243,10 @@ def run_all_problems():
                     errors[f"{PROBLEM_TYPE}-{problem_name}"] = "Data Loading Failed"
                     continue
 
-                log_output_path = os.path.join(results_dir, f"{problem_name}_event_log.csv")
+                log_output_path = os.path.join(results_dir, PROBLEM_TYPE, f"{problem_name}_event_log.csv")
 
                 if PROBLEM_TYPE == "JSSP":
-                    SEQUENCING_RULE = "FIFO"
+                    SEQUENCING_RULE = "FSPT"
                     ROUTING_RULE = "FIFO"
                     DISPATCHING_RULE = "SPT"
                 elif PROBLEM_TYPE == "PFSP":
@@ -308,7 +312,7 @@ def main():
     is_bench_marking = True
     significant_digits = 10
 
-    PROBLEM_TYPE = "PFSP"
+    PROBLEM_TYPE = "PMSP"
     problem_name = "test_PFSP"
 
     DATA_ROOT = "data"
@@ -335,7 +339,7 @@ def main():
     log_output_path = os.path.join(results_dir, f"event_log_{problem_name}.csv")
 
     if PROBLEM_TYPE == "JSSP":
-        SEQUENCING_RULE = "FIFO"            ### JSSP에서 SEQUENCING은 FIFO로 고정
+        SEQUENCING_RULE = "FSPT"            ### JSSP에서 SEQUENCING은 FSPT로 고정
         ROUTING_RULE = "FIFO"               ### JSSP에서 ROUTING은 의미 없음
         DISPATCHING_RULE = "SPT"            ### DISPATCHING rule 선택(SPT, WSPT, LPT, MWKR, LWKR, RANDOM, FIFO)
     elif PROBLEM_TYPE == "PFSP":
@@ -345,7 +349,7 @@ def main():
     elif PROBLEM_TYPE == "PMSP":
         SEQUENCING_RULE = "WSPT"            ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
         ROUTING_RULE = "WSPT"               ### ROUTING rule 선택(SPT, WSPT, LPT, RANDOM, DEFAULT)
-        DISPATCHING_RULE = "WSPT"           ### DISPATCHING rule 선택(SPT, WSPT, LPT, RANDOM, FIFO)
+        DISPATCHING_RULE = "FIFO"           ### DISPATCHING rule 선택(SPT, WSPT, LPT, RANDOM, FIFO)
     else:
         SEQUENCING_RULE = "RANDOM"          ### SEQUENCING rule 선택(SPT, LPT, WSPT, JOHNSON, PALMER, RANDOM, FIFO)
         ROUTING_RULE = "RANDOM"             ### ROUTING rule 선택(SPT, WSPT, LPT, RANDOM, DEFALT)
