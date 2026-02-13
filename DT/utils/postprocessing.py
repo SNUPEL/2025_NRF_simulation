@@ -108,16 +108,19 @@ def plot_gantt_chart(log_path: str):
                 ax.text(start_time + duration / 2, y_pos, text_content, ha='center', va='center', color=text_color,
                         fontweight='bold', fontsize=8)
 
-    ax.set_xlabel('Time', fontsize=14)
-    ax.set_ylabel('Machine', fontsize=14)
-    ax.set_title('Gantt Chart for Job Shop Scheduling', fontsize=18)
+    ax.set_xlabel('Time', fontsize=20)
+    ax.set_ylabel('Machine', fontsize=20)
+    ax.tick_params(axis='x', labelsize=18)
+    ax.tick_params(axis='y', labelsize=18)
+
+    ax.set_title('Gantt Chart for Job Shop Scheduling', fontsize=20)
     ax.grid(axis='x', linestyle='--')
 
     legend_elements = [plt.Rectangle((0, 0), 1, 1, color=job_color_map[job]) for job in unique_jobs]
-    ax.legend(legend_elements, unique_jobs, title="Jobs", bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=10,
-              title_fontsize=12)
+    ax.legend(legend_elements, unique_jobs, title="Jobs", bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=18,
+              title_fontsize=18)
 
-    ax.text(1.0, 1.05, f"Makespan: {makespan:.2f}", transform=ax.transAxes, fontsize=14, ha='right', va='top',
+    ax.text(1.0, 1.05, f"Makespan: {makespan:.2f}", transform=ax.transAxes, fontsize=18, ha='right', va='top',
             bbox=dict(boxstyle='round,pad=0.3', fc='lightgreen', alpha=0.7))
 
     plt.tight_layout(rect=[0, 0, 0.88, 1])

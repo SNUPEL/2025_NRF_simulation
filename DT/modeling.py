@@ -312,8 +312,8 @@ def main():
     is_bench_marking = True
     significant_digits = 10
 
-    PROBLEM_TYPE = "PMSP"
-    problem_name = "test_PFSP"
+    PROBLEM_TYPE = "JSSP"
+    problem_name = "la01"
 
     DATA_ROOT = "data"
     DATA_FOLDER = "preprocessed"
